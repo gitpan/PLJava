@@ -137,7 +137,7 @@ I<** Don't forget to add SWIG in the search PATH:>
 
 => Win32
 
-You will need to have VC++ 6 to compile PLJava, since your Perl version for Win32 (from ActiveState)
+You will need to have VC++ 6+ to compile PLJava, since your Perl version for Win32 (from ActiveState)
 will be probably compiled with VC++, and we need the same compiler of the interpreter
 to embed a Perl program.
 

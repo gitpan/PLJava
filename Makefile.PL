@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 
-use strict;
+use strict qw(vars) ;
 
 require 5.006 ;
 
@@ -9,6 +9,8 @@ use ExtUtils::Embed ;
 
 use Config ;
 use File::Copy ;
+
+no warnings ;
 
 BEGIN
 {
@@ -24,17 +26,26 @@ BEGIN
 ########
 
 my $NAME = 'PLJava' ;
-my $VERSION = '0.01' ;
+my $VERSION = '0.02' ;
 my $JAVA_PACKAGE = 'perl5' ;
+
+#######
+# EXT #
+#######
+
+my $dll = ".$Config{so}" ;
+my $o = $Config{_o};
+
+my $LIBNAME = ($dll =~ /\.(?:so|o)$/) ? "lib$NAME" : $NAME ;
 
 #########
 # FILES #
 #########
 
 my $C_FILES = "$NAME.c ${NAME}_wrap.c" ;
-my $O_FILES = "$NAME.obj ${NAME}_wrap.obj" ;
+my $O_FILES = "$NAME$o ${NAME}_wrap$o" ;
 my $INTERFACE = "$NAME.i" ;
-my $CLEAN_FILES = "PLJava.dll" ;
+my $CLEAN_FILES = "$LIBNAME$dll" ;
 
 my $CLEAN_SWIG_FILES = "$NAME.java ${NAME}_wrap.c ${NAME}JNI.java" ;
 
@@ -44,20 +55,47 @@ my $JAVA_FILES = '' ;
 #while (my $filename = readdir DIRLOG) { $JAVA_FILES .= " $filename" if $filename =~ /\.java$/ ;}
 #closedir (DIRLOG);
 
+#############
+# CHECK ENV #
+#############
+
+{
+
+  if ( -d $ENV{JAVA_HOME} ) {
+    $ENV{JAVA_BIN}     = $ENV{JAVA_HOME} . "/bin"     if !defined $ENV{JAVA_BIN} ;
+    $ENV{JAVA_INCLUDE} = $ENV{JAVA_HOME} . "/include" if !defined $ENV{JAVA_INCLUDE} ;
+  }
+
+  my $error ;
+  foreach my $envs_i ( qw(JAVA_HOME JAVA_BIN JAVA_INCLUDE) ) {
+    if ( !-d $ENV{$envs_i} ) { warn("Can't find $envs_i!\n") ; $error = 1 ;}
+  }
+  
+  die "\n** Can't create Makefile, please set right the JAVA enverioment variables!\n" if $error ;
+}
+
 ########
 # VARS #
 ########
 
 my $debug = 0;
 
-my $dll = ".$Config{so}" ;
-my $o = $Config{_o};
 my $pccflags = ccopts;
 my $pldflags = ldopts;
 my $ld = $Config{ld};
 my $cc = $Config{cc};
 
-my( $out, $ccdebug, $lddebug, $warn, $rm, $mv );
+my $javac   = $ENV{JAVA_BIN} ? $ENV{JAVA_BIN} . "/javac" : "javac" ;
+my $javabin = $ENV{JAVA_BIN} ? $ENV{JAVA_BIN} . "/java"  : "java"  ;
+
+chomp($pldflags) ;
+
+if ( $^O =~ /(?:win32|dos)/i ) {
+  $javac =~ s/\//\\/g ;
+  $javabin =~ s/\//\\/g ;
+}
+
+my( $out, $ccdebug, $lddebug , $ldlnk , $warn, $rm, $mv );
 
 my $is_MSVC = $cc =~ m/^cl/;
 if( $is_MSVC ) {
@@ -65,20 +103,33 @@ if( $is_MSVC ) {
   $ccdebug = $debug ? '-Zi ' : '';
   $lddebug = $debug ? '-debug ' : '-release ';
   $warn = '-W3';
+  $ldlnk = '' ;
 } else {
   $out = '-o ';
   $ccdebug = $debug ? '-g ' : '';
   $lddebug = $debug ? '' : '-s ';
   $warn = '-Wall -Wno-comments ';
+  $ldlnk = ' -shared' ;
 }
 
 $rm = $^O eq 'MSWin32' ? '$(PERL) -MExtUtils::Command -e rm_f' : 'rm';
 $mv = $^O eq 'MSWin32' ? '$(PERL) -MExtUtils::Command -e mv' : 'mv';
 
-my  $cflags = "$ccdebug$warn$pccflags";
-my $ldflags = "$lddebug$pldflags";
+my $cflags  = "$ccdebug$warn$pccflags";
+my $ldflags = "$lddebug$pldflags$ldlnk";
 
-my $rm_dll = "-\$(RM) *$dll" if $dll ;
+my $includes = $ENV{JAVA_INCLUDE} ? qq`-I"$ENV{JAVA_INCLUDE}"` : '' ;
+
+  for my $os ( qw(win32 linux) ) {
+    my $dir = "$ENV{JAVA_INCLUDE}/$os" ;
+    $includes .= qq` -I"$dir"` if -d $dir ;
+  }
+
+##################
+# CREATE LIB DIR #
+##################
+
+
 
 #################
 # WRITEMAKEFILE #
@@ -103,7 +154,7 @@ CC=$cc
 CFLAGS=$cflags
 LDFLAGS=$ldflags
 
-INC = -I"$ENV{JAVA_INCLUDE}" -I"$ENV{JAVA_INCLUDE}/win32"
+INC = $includes
 
 C_FILES = $C_FILES
 O_FILES = $O_FILES
@@ -121,7 +172,7 @@ DISTVNAME = \$(DISTNAME)-\$(VERSION)
 .c$o:
 	\$(CC) -c \$(INC) \$(CFLAGS) \$<
 
-all: $NAME$dll built
+all: $LIBNAME$dll built
 
 clean: cleanbuilt cleanjavaclass
 	-\$(RM) *$o *.exp *.lib
@@ -133,7 +184,7 @@ cleanswig:
 	-\$(RM) $CLEAN_SWIG_FILES
 
 realclean: clean
-	-\$(RM) $NAME$dll
+	-\$(RM) $LIBNAME$dll
 	-\$(RM) Makefile Makefile.old
 
 cleanjavaclass :
@@ -141,16 +192,16 @@ cleanjavaclass :
 	-\$(RM) *.class
 
 javaclass:
-	javac -d ./ $JAVA_FILES *.java
+	$javac -d ./ $JAVA_FILES *.java
 
 swig: cleanswig
 	swig -java -package $JAVA_PACKAGE \$(INTERFACE)
 
-$NAME$dll: \$(OBJECTS) javaclass
+$LIBNAME$dll: \$(OBJECTS) javaclass
 	\$(LD) \$(OBJECTS) \$(LDFLAGS) -dll $out\$@
 
 test:
-	java test
+	$javabin test
 
 
 dist : \$(DISTVNAME).tar\$(SUFFIX)
@@ -168,11 +219,16 @@ distdir :
 
 
 cleanbuilt :
+	\$(RM_RF) lib
 	\$(RM_RF) built
 
 
-built : cleanbuilt
-	\$(PERL) -MExtUtils::Manifest=manicopy,maniread -e "manicopy( { '\$(DISTNAME)$dll' => '' , \%{ maniread('MANIFEST-BUILT') } } ,'built');"
+movelib :
+	\$(PERL) -MExtUtils::Manifest=manicopy,maniread -e "chdir('basiclib') ; manicopy( { \%{ maniread('MANIFEST-LIB') } } ,'../lib');"
+
+
+built : cleanbuilt movelib
+	\$(PERL) -MExtUtils::Manifest=manicopy,maniread -e "manicopy( { '$LIBNAME$dll' => '' , \%{ maniread('MANIFEST-BUILT') } } ,'built');"
 
 
 .SUFFIXES: $o
