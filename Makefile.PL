@@ -31,7 +31,7 @@ if ( $ARGV[0] =~ /renametree/i ) {
 ########
 
 my $NAME = 'PLJava' ;
-my $VERSION = '0.03' ;
+my $VERSION = '0.04' ;
 my $JAVA_PACKAGE = 'perl5' ;
 
 #######

@@ -24,7 +24,7 @@ use 5.006 ;
 #use strict qw(vars);
 #use vars qw($VERSION @ISA) ;
 
-$VERSION = '0.01' ;
+$VERSION = '0.04' ;
 
 ########
 # BOOT # The boot will be made by PLJava.c

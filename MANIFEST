@@ -50,5 +50,4 @@ basiclib/strict.pm-txt
 basiclib/vars.pm-txt
 basiclib/warnings.pm-txt
 basiclib/warnings/register.pm-txt
-renametree.pl
 test.java
