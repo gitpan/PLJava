@@ -21,12 +21,17 @@ BEGIN
     }
 }
 
+if ( $ARGV[0] =~ /renametree/i ) {
+  renametree( $ARGV[1] , $ARGV[2] ) ;
+  exit;
+}
+
 ########
 # NAME #
 ########
 
 my $NAME = 'PLJava' ;
-my $VERSION = '0.02' ;
+my $VERSION = '0.03' ;
 my $JAVA_PACKAGE = 'perl5' ;
 
 #######
@@ -219,11 +224,13 @@ distdir :
 
 
 cleanbuilt :
+	\$(PERL) MakeFile.PL renametree basiclib txt
 	\$(RM_RF) lib
 	\$(RM_RF) built
 
 
 movelib :
+	\$(PERL) MakeFile.PL renametree basiclib .
 	\$(PERL) -MExtUtils::Manifest=manicopy,maniread -e "chdir('basiclib') ; manicopy( { \%{ maniread('MANIFEST-LIB') } } ,'../lib');"
 
 
@@ -235,6 +242,64 @@ built : cleanbuilt movelib
 
 EOT
 
+##############
+# RENAMETREE #
+##############
+
+sub renametree {
+  my $basedir = $_[0] || './basiclib' ;
+  my $ext = exists $_[1] ? $_[1] : 'txt' ;
+  
+  $ext =~ s/\W//gs ;
+  
+  $ext = "-$ext" if $ext ;
+  
+  my @dir = catdir($basedir , 0,1,1) ;
+  
+  foreach my $dir_i ( @dir ) {
+    my $new_file = $dir_i ;
+    $new_file =~ s/\.(\w+)(?:-\w+)?$/.$1$ext/ ;
+    rename($dir_i , $new_file) ;
+    ##print "$dir_i >> $new_file\n" ;
+  }
+}
+
+##########
+# CATDIR # (DIR , CUT_BASE , RECURSIVE , ONLY_FILES)
+##########
+
+sub catdir {
+  my ( $dir , $cut , $r , $f ) = @_ ;
+  
+  my @files ;
+  
+  my @DIR = $dir ;
+  foreach my $DIR ( @DIR ) {
+    my $DH ;
+    opendir ($DH, $DIR);
+
+    while (my $filename = readdir $DH) {
+      if ($filename ne "\." && $filename ne "\.\.") {
+        my $file = "$DIR/$filename" ;
+        if ($r && -d $file) { push(@DIR , $file) ;}
+        else {
+          if (!$f || !-d $file) {
+            $file =~ s/^\Q$dir\E\/?//s if $cut ;
+            push(@files , $file) ;
+          }
+        }
+      }
+    }
+    
+    closedir ($DH) ;
+  }
+  
+  return( @files ) ;
+}
+
+#######
+# END #
+#######
 
 
 
